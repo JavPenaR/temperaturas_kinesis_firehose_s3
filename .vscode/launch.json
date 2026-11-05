@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Iniciar Kinesis Lab",
+      "request": "launch",
+      "mainClass": "edu.example.kinesislab.KinesisLabApplication",
+      "preLaunchTask": "Compilar backend con Maven Wrapper",
+      "env": {
+        "AWS_PROFILE": "lab-kinesis",
+        "AWS_REGION": "us-east-1",
+        "KINESIS_STREAM_NAME": "lab-lecturas"
+      }
+    }
+  ]
+}
