@@ -12,11 +12,26 @@ React → Spring Boot → Kinesis Data Streams (lab-lecturas)
 
 ## Requisitos
 
-- Haber completado la primera parte y tener el stream `lab-lecturas` en estado **Active**.
+- Tener acceso a una cuenta AWS para crear el stream `lab-lecturas`. Si ya lo creaste en la primera parte, verifica que siga en estado **Active** y continúa con Firehose.
 - Tener la misma región para el stream, Firehose y el bucket S3.
 - Permisos de la cuenta para Firehose, S3 e IAM. En **AWS Academy Learner Lab**, comprueba el botón **Readme** del laboratorio: los servicios y permisos disponibles dependen del curso. No hay que guardar claves AWS dentro de este proyecto.
 
-## Opción A: crear los recursos con CloudFormation
+## Paso 1: crear el stream de Kinesis Data Streams
+
+Si el stream `lab-lecturas` ya existe y está **Active**, puedes pasar al siguiente apartado. Si no existe, créalo antes de configurar Firehose:
+
+1. En **AWS Academy → Learner Lab**, inicia el laboratorio con **Start Lab** y abre la consola desde el botón **AWS**. En una cuenta AWS propia, entra directamente a la consola.
+2. En el selector superior de región, elige la región que usarás en toda la práctica; el ejemplo del proyecto utiliza **US East (N. Virginia), `us-east-1`**. Anótala para usarla también en S3, Firehose y la configuración del backend.
+3. Busca **Kinesis** en la consola y abre **Amazon Kinesis → Data streams**. Selecciona **Create data stream**.
+4. En **Data stream name**, escribe exactamente **`lab-lecturas`**. El backend publica en ese nombre de manera predeterminada.
+5. En **Capacity mode**, selecciona **Provisioned** y configura **1 shard** para este ejercicio de bajo tráfico. Conserva las demás opciones predeterminadas. También es posible usar **On-demand** si el laboratorio lo requiere; en ese caso no se indica el número de shards.
+6. Selecciona **Create Kinesis stream**. Espera a que el estado cambie de **Creating** a **Active** y abre el stream para comprobar su nombre y región.
+
+Si aparece **Access denied** o Kinesis no está disponible, revisa el **Readme** de Learner Lab y consulta al docente sobre los permisos del curso. No crees otro stream con un nombre distinto sin actualizar `KINESIS_STREAM_NAME` en el backend y el parámetro `KinesisStreamName` de CloudFormation.
+
+Fuente: [crear un stream desde la consola AWS](https://docs.aws.amazon.com/streams/latest/dev/how-do-i-create-a-stream.html).
+
+## Paso 2, opción A: crear Firehose y S3 con CloudFormation
 
 La plantilla [`infra/firehose-s3.json`](infra/firehose-s3.json) crea un bucket privado con cifrado SSE-S3, un rol que permite a Firehose leer el stream y escribir en ese bucket, y un flujo de Firehose. **No crea ni modifica el stream existente.** El nombre del bucket debe ser único en S3 y estar en minúsculas.
 
@@ -41,7 +56,7 @@ Para ver las salidas de la pila:
 aws cloudformation describe-stacks --stack-name lab-lecturas-firehose-s3 --query "Stacks[0].Outputs"
 ```
 
-## Opción B: crear la conexión desde la consola AWS
+## Paso 2, opción B: crear Firehose y S3 desde la consola AWS
 
 1. Abre **Amazon S3 → Create bucket**. Asigna un nombre único, usa la **misma región** que `lab-lecturas`, mantén el bloqueo de acceso público y el cifrado predeterminado. Crea el bucket.
 2. Abre **Amazon Data Firehose → Create Firehose stream** (el nombre exacto del botón puede variar en la consola). Elige **Amazon Kinesis Data Streams** como origen y **Amazon S3** como destino.
@@ -52,7 +67,7 @@ aws cloudformation describe-stacks --stack-name lab-lecturas-firehose-s3 --query
 
 Si el rol existente de Academy no tiene esos permisos, la consola puede permitir crear el flujo pero luego mostrar errores de entrega. Revisa las métricas de Firehose y el rol asignado.
 
-## Enviar datos y comprobar S3
+## Paso 3: enviar datos y comprobar S3
 
 **Crea Firehose antes de enviar nuevas lecturas:** cuando usa Kinesis Data Streams como origen, empieza a leer desde la posición `LATEST`, por lo que las lecturas anteriores a su creación no sirven para esta prueba.
 
@@ -86,7 +101,7 @@ Si no aparecen objetos, confirma que el flujo está **Active**, que el bucket y 
 
 ## Cierre del laboratorio
 
-Elimina primero el flujo de Firehose. Si usaste CloudFormation, elimina la pila después. La plantilla conserva el bucket al borrar la pila para evitar perder datos por accidente: **vacía y elimina manualmente el bucket** cuando ya no necesites los archivos. Elimina el stream `lab-lecturas` de la primera parte al finalizar la práctica. Estos servicios pueden consumir presupuesto mientras existan.
+Elimina primero el flujo de Firehose. Si usaste CloudFormation, elimina la pila después. La plantilla conserva el bucket al borrar la pila para evitar perder datos por accidente: **vacía y elimina manualmente el bucket** cuando ya no necesites los archivos. Elimina el stream `lab-lecturas` al finalizar la práctica. Estos servicios pueden consumir presupuesto mientras existan.
 
 ## Fuentes AWS
 
