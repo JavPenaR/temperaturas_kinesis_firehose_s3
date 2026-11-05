@@ -31,7 +31,44 @@ Si aparece **Access denied** o Kinesis no está disponible, revisa el **Readme**
 
 Fuente: [crear un stream desde la consola AWS](https://docs.aws.amazon.com/streams/latest/dev/how-do-i-create-a-stream.html).
 
-## Paso 2, opción A: crear Firehose y S3 con CloudFormation
+## Paso 2: guardar las credenciales temporales de AWS Academy en el PC
+
+La sesión abierta en el navegador de AWS Academy no se transmite al backend. En **Learner Lab → AWS Details → AWS CLI → Show**, copia el bloque de credenciales temporales de tu propia sesión. Guarda sus tres valores en el archivo `credentials` de tu usuario, **fuera del repositorio**. Si el bloque comienza con `[default]`, cambia solamente ese encabezado a `[lab-kinesis]`; conserva intactos los valores.
+
+```ini
+[lab-kinesis]
+aws_access_key_id = <valor-de-Academy>
+aws_secret_access_key = <valor-de-Academy>
+aws_session_token = <valor-de-Academy>
+```
+
+Los textos entre `<...>` son marcadores de ejemplo: reemplázalos por los valores que muestra Academy. No compartas ese archivo ni copies las claves al código, al README o a un commit. Si ya tienes otros perfiles, añade este bloque sin borrarlos.
+
+**Windows:** en el Explorador de archivos, escribe `%USERPROFILE%\.aws` en la barra de direcciones. Crea la carpeta si no existe y, dentro, un archivo llamado exactamente `credentials` **sin extensión `.txt`**. Ábrelo con Bloc de notas o VS Code y pega el bloque anterior con los valores reales. La ruta resultante es `C:\Users\<tu-usuario>\.aws\credentials`.
+
+**Linux:** usa el archivo `~/.aws/credentials` de tu usuario. Si no existe la carpeta, créala con `mkdir -p ~/.aws`; crea o abre el archivo con un editor de texto, pega el bloque y guarda. Después limita su lectura a tu usuario con `chmod 600 ~/.aws/credentials`.
+
+En `.vscode/launch.json`, el proyecto ya selecciona `AWS_PROFILE=lab-kinesis`, `KINESIS_STREAM_NAME=lab-lecturas` y `AWS_REGION=us-east-1`. Cambia **solo la región** si tu stream está en otra. La tarea de VS Code usa `mvnw.cmd` en Windows y `mvnw` en Linux. Si ejecutas desde una terminal en lugar de VS Code, configura las variables en esa misma terminal:
+
+```powershell
+# Windows PowerShell
+$env:AWS_PROFILE = "lab-kinesis"
+$env:AWS_REGION = "us-east-1"
+$env:KINESIS_STREAM_NAME = "lab-lecturas"
+```
+
+```bash
+# Linux Bash
+export AWS_PROFILE=lab-kinesis
+export AWS_REGION=us-east-1
+export KINESIS_STREAM_NAME=lab-lecturas
+```
+
+Si tienes AWS CLI instalado, comprueba la identidad **sin mostrar las claves** con `aws sts get-caller-identity --profile lab-kinesis`. Si aparece `ExpiredToken`, vuelve a **AWS Details → AWS CLI → Show** y reemplaza los tres valores del perfil: las credenciales de Learner Lab caducan. Si el perfil parece correcto pero se usa otra identidad, revisa si tienes `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` o `AWS_SESSION_TOKEN` definidos en el entorno; el SDK puede darles prioridad. Vuelve a iniciar el backend después de actualizar las credenciales.
+
+Fuentes: [archivo de credenciales compartido](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html), [perfiles en el SDK de Java](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-profiles.html) y [orden de búsqueda de credenciales](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html).
+
+## Paso 3, opción A: crear Firehose y S3 con CloudFormation
 
 La plantilla [`infra/firehose-s3.json`](infra/firehose-s3.json) crea un bucket privado con cifrado SSE-S3, un rol que permite a Firehose leer el stream y escribir en ese bucket, y un flujo de Firehose. **No crea ni modifica el stream existente.** El nombre del bucket debe ser único en S3 y estar en minúsculas.
 
@@ -48,6 +85,17 @@ aws cloudformation deploy `
   --parameter-overrides KinesisStreamName=lab-lecturas BucketName=$bucket
 ```
 
+En Linux, desde la raíz del proyecto y después de exportar `AWS_PROFILE` y `AWS_REGION` en el paso 2:
+
+```bash
+bucket="lab-lecturas-<identificador-unico-en-minusculas>"
+aws cloudformation deploy \
+  --template-file infra/firehose-s3.json \
+  --stack-name lab-lecturas-firehose-s3 \
+  --capabilities CAPABILITY_IAM \
+  --parameter-overrides KinesisStreamName=lab-lecturas BucketName="$bucket"
+```
+
 Reemplaza el valor de `$bucket` antes de ejecutar. Si el laboratorio no permite `iam:CreateRole` o `iam:PassRole`, la creación fallará; solicita un rol permitido al docente o usa la opción de consola si tu cuenta permite que Firehose cree su rol.
 
 Para ver las salidas de la pila:
@@ -56,7 +104,7 @@ Para ver las salidas de la pila:
 aws cloudformation describe-stacks --stack-name lab-lecturas-firehose-s3 --query "Stacks[0].Outputs"
 ```
 
-## Paso 2, opción B: crear Firehose y S3 desde la consola AWS
+## Paso 3, opción B: crear Firehose y S3 desde la consola AWS
 
 1. Abre **Amazon S3 → Create bucket**. Asigna un nombre único, usa la **misma región** que `lab-lecturas`, mantén el bloqueo de acceso público y el cifrado predeterminado. Crea el bucket.
 2. Abre **Amazon Data Firehose → Create Firehose stream** (el nombre exacto del botón puede variar en la consola). Elige **Amazon Kinesis Data Streams** como origen y **Amazon S3** como destino.
@@ -67,21 +115,25 @@ aws cloudformation describe-stacks --stack-name lab-lecturas-firehose-s3 --query
 
 Si el rol existente de Academy no tiene esos permisos, la consola puede permitir crear el flujo pero luego mostrar errores de entrega. Revisa las métricas de Firehose y el rol asignado.
 
-## Paso 3: enviar datos y comprobar S3
+## Paso 4: enviar datos y comprobar S3
 
 **Crea Firehose antes de enviar nuevas lecturas:** cuando usa Kinesis Data Streams como origen, empieza a leer desde la posición `LATEST`, por lo que las lecturas anteriores a su creación no sirven para esta prueba.
 
-Desde VS Code puedes usar **Run and Debug → Iniciar Kinesis Lab** para el backend y `npm run dev` en `frontend`. O desde terminal:
+Desde VS Code puedes usar **Run and Debug → Iniciar Kinesis Lab** para el backend y `npm run dev` en `frontend`. O desde terminal, después de configurar las variables del paso 2:
 
 ```powershell
-$env:AWS_PROFILE = "lab-kinesis"
-$env:AWS_REGION = "us-east-1"
-$env:KINESIS_STREAM_NAME = "lab-lecturas"
+# Windows PowerShell, desde la raíz del proyecto
 cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-En otra terminal:
+```bash
+# Linux Bash, desde la raíz del proyecto
+cd backend
+./mvnw spring-boot:run
+```
+
+En otra terminal, tanto en Windows como en Linux:
 
 ```powershell
 cd frontend
